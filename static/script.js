@@ -1,35 +1,40 @@
 let mediaRecorder;
-let chunks = [];
+let audioChunks = [];
 
-const recordBtn = document.getElementById('record');
+const startBtn = document.getElementById("start-btn");
 
-recordBtn.addEventListener('click', async () => {
-    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+startBtn.addEventListener("click", async () => {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        startBtn.innerText = "Recording...";
+
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = e => chunks.push(e.data);
-        mediaRecorder.onstop = sendAudio;
+
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+            audioChunks = [];
+
+            const formData = new FormData();
+            formData.append("file", audioBlob, "voice.webm");
+
+            const response = await fetch("/speech_to_text", {
+                method: "POST",
+                body: formData,
+            });
+
+            const data = await response.json();
+            alert("GPT ответ: " + data.response);
+        };
+
         mediaRecorder.start();
-        recordBtn.textContent = 'Stop recording';
-    } else {
-        mediaRecorder.stop();
-        recordBtn.textContent = 'Start recording';
+
+        setTimeout(() => {
+            mediaRecorder.stop();
+            startBtn.innerText = "Start recording";
+        }, 5000); // Запись 5 секунд
     }
 });
-
-function sendAudio() {
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    chunks = [];
-    const formData = new FormData();
-    formData.append('file', blob, 'recording.webm');
-
-    fetch('/api/gpt-bot', {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        console.log(data);
-    })
-    .catch(err => console.error(err));
-}
